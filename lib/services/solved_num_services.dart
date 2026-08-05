@@ -282,14 +282,14 @@ class SolvedNumServices {
       var limit = 25;
       var pageCount = 0;
       // 避免用户不存在时无限遍历整个排行榜
-      final maxPages = 2000;
+      const maxPages = 2000;
 
       while (true) {
         pageCount++;
         if (pageCount > maxPages) {
           throw Exception("未找到用户（已超过查询上限）");
         }
-        final url = 'https://www.matiji.net/exam-back/pc/ojRankByType.do';
+        const url = 'https://www.matiji.net/exam-back/pc/ojRankByType.do';
         final response = await dio.post(
           url,
           data: 'rankType=0&start=$start&limit=$limit',
