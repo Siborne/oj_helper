@@ -35,7 +35,7 @@ void main() {
       expect(
         RecentContestServices.isInTime(
           startTime: midnight - 7200,
-          duration: 7200,
+          duration: 3600,
           queryEndSeconds: queryWindow,
           midnightSeconds: midnight,
         ),
