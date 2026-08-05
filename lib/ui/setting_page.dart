@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:oj_helper/utils/version_utils.dart' show VersionUtils;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -27,11 +28,6 @@ class _SettingPageState extends State<SettingPage> {
     });
   }
 
-  String _normalizeVersion(String version) {
-    // 移除 'v' 或 'V' 前缀，并移除所有点号
-    return version.replaceFirst(RegExp(r'^[vV]'), '').replaceAll('.', '');
-  }
-
   Future<void> checkForUpdate() async {
     setState(() {
       isChecking = true;
@@ -43,12 +39,9 @@ class _SettingPageState extends State<SettingPage> {
       if (response.statusCode == 200) {
         final latestRelease = json.decode(response.body);
         String latestVersion = latestRelease['tag_name'];
-        String releaseBody = latestRelease['body'];
+        String releaseBody = latestRelease['body'] ?? '';
 
-        String normalizedLatest = _normalizeVersion(latestVersion);
-        String normalizedCurrent = _normalizeVersion(curVersion);
-
-        if (normalizedLatest != normalizedCurrent) {
+        if (VersionUtils.isNewer(latestVersion, curVersion)) {
           _showUpdateDialog(curVersion, latestVersion, releaseBody);
         } else {
           _showNoUpdateDialog();

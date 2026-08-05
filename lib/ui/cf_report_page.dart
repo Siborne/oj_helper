@@ -15,21 +15,56 @@ class _CfReportPageState extends State<CfReportPage> {
   ReportServices report = ReportServices();
   final TextEditingController _controller = TextEditingController();
 
+  static const List<Color> _pieColors = [
+    Colors.blue,
+    Colors.green,
+    Colors.orange,
+    Colors.redAccent,
+    Colors.purple,
+    Colors.teal,
+    Colors.pink,
+    Colors.indigo,
+    Colors.brown,
+    Colors.cyan,
+    Colors.lime,
+    Colors.amber,
+  ];
+
   void _fetchData() async {
-    String username = _controller.text;
-    List<Map<String, dynamic>> data =
-        await report.fetchCodeforcesData(username);
-    Map<String, int> tag = {};
-    Map<int, int> rating = {};
-    for (var i in data) {
-      for (var j in i['tags']) {
-        tag[j] = tag[j] == null ? 1 : tag[j]! + 1;
+    String username = _controller.text.trim();
+    if (username.isEmpty) return;
+    List<Map<String, dynamic>> data;
+    try {
+      data = await report.fetchCodeforcesData(username);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('查询失败，请检查用户名或网络')),
+        );
       }
-      rating[i['rating']] =
-          rating[i['rating']] == null ? 1 : rating[i['rating']]! + 1;
+      return;
     }
+    Map<String, int> tag = {};
+    for (var i in data) {
+      for (var j in (i['tags'] as List? ?? [])) {
+        final key = j.toString();
+        tag[key] = (tag[key] ?? 0) + 1;
+      }
+    }
+    final sorted = tag.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     setState(() {
       dataList = [];
+      var colorIndex = 0;
+      for (final e in sorted) {
+        dataList.add(PieChartSectionData(
+          value: e.value.toDouble(),
+          title: e.key,
+          color: _pieColors[colorIndex % _pieColors.length],
+          titleStyle: const TextStyle(fontSize: 12, color: Colors.black),
+        ));
+        colorIndex++;
+      }
     });
   }
 

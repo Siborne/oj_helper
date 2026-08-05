@@ -70,18 +70,24 @@ class _NavigationPageState extends State<NavigationPage> {
                       ),
                     ],
                   ),
-                  // 页面内容
+                  // 页面内容（IndexedStack 保持各页面状态，切换不重建）
                   Expanded(
-                    child: _pages[_selectedIndex],
+                    child: IndexedStack(
+                      index: _selectedIndex,
+                      children: _pages,
+                    ),
                   ),
                 ],
               );
             } else {
               return Column(
                 children: [
-                  // 页面内容
+                  // 页面内容（IndexedStack 保持各页面状态，切换不重建）
                   Expanded(
-                    child: _pages[_selectedIndex],
+                    child: IndexedStack(
+                      index: _selectedIndex,
+                      children: _pages,
+                    ),
                   ),
                   // 底部导航栏
                   BottomNavigationBar(
