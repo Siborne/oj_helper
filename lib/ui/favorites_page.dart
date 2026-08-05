@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:oj_helper/models/contest.dart';
+import 'package:oj_helper/utils/favorite_utils.dart' show FavoriteUtils;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:day_night_time_picker/day_night_time_picker.dart';
@@ -24,23 +27,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
   // 加载收藏夹
   void __loadFavoriteContest() async {
     prefs = await SharedPreferences.getInstance();
-    String? cur = prefs.getString('favourite_contests');
-    if (cur == null || cur == '') {
-      setState(() {});
-      return;
-    }
-    for (String s in cur.split(',')) {
+    final names = FavoriteUtils.getFavoriteNames(prefs);
+    for (String s in names) {
       if (s == '') continue;
-      String infor = prefs.getString(s) ?? '';
-      List<String> inforList = infor.split(',');
+      final infor = prefs.getString(s) ?? '';
       if (infor == '') continue;
-      favoriteContests.add(Contest.fromJson(
-        inforList[0],
-        int.parse(inforList[1]),
-        int.parse(inforList[2]),
-        inforList[3],
-        inforList[4],
-      ));
+      final contest = FavoriteUtils.parseStoredContest(infor);
+      if (contest != null) {
+        favoriteContests.add(contest);
+      }
     }
     favoriteContests
         .sort((a, b) => a.startTimeSeconds.compareTo(b.startTimeSeconds));
@@ -50,29 +45,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
   // 删除比赛
   void _delFavoriteContest(Contest contest) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String infor =
-        '${contest.name},${contest.startTimeSeconds},${contest.durationSeconds},${contest.platform},${contest.link}';
-    if (prefs.containsKey(contest.name)) {
+    final names = FavoriteUtils.getFavoriteNames(prefs);
+    if (names.contains(contest.name)) {
       await prefs.remove(contest.name);
-      String? cur = prefs.getString('favourite_contests');
-      List<String> contestNames = [];
-      if (cur == null) {
-        setState(() {});
-        return;
-      }
-      contestNames = cur.split(',');
-      contestNames.remove(contest.name);
-      prefs.setString('favourite_contests', contestNames.join(','));
-    } else {
-      await prefs.setString(contest.name, infor);
-      String? cur = prefs.getString('favourite_contests');
-      List<String> contestNames = [];
-      if (cur == null) {
-        setState(() {});
-        return;
-      }
-      contestNames.add(contest.name);
-      prefs.setString('favourite_contests', contestNames.join(','));
+      names.remove(contest.name);
+      await prefs.setString('favourite_contests', jsonEncode(names));
     }
     favoriteContests.remove(contest);
     setState(() {});
@@ -379,10 +356,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
           ),
           TextButton(
             onPressed: () async {
-              if (startTime == 0 || endTime == 0) {
+              prefs = await SharedPreferences.getInstance();
+              if (startYMDseconds == 0 || startHMseconds == 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('请选择开始时间和结束时间'),
+                    content: Text('请完整选择开始时间（日期和时分）'),
+                  ),
+                );
+                return;
+              } else if (endYMDseconds == 0 || endHMseconds == 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('请完整选择结束时间（日期和时分）'),
                   ),
                 );
                 return;
@@ -412,18 +397,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   return;
                 }
               }
-              String infor =
-                  '$name,$startTime,${endTime - startTime},$platform,$link';
-              await prefs.setString(name, infor);
-              String? cur = prefs.getString('favourite_contests');
-              List<String> contestNames = [];
-              if (cur == null) {
-                setState(() {});
-                return;
-              }
-              contestNames = cur.split(',');
+              await prefs.setString(
+                  name,
+                  FavoriteUtils.encodeContest(
+                      name, startTime, endTime - startTime, platform, link));
+              final contestNames = FavoriteUtils.getFavoriteNames(prefs);
               contestNames.add(name);
-              prefs.setString('favourite_contests', contestNames.join(','));
+              await prefs.setString(
+                  'favourite_contests', jsonEncode(contestNames));
               favoriteContests.add(Contest.fromJson(
                   name, startTime, endTime - startTime, platform, link));
               favoriteContests.sort(

@@ -4,7 +4,10 @@ import 'package:html/parser.dart' show parse;
 import 'package:oj_helper/models/solved_num.dart' show SolvedNum;
 
 class SolvedNumServices {
-  final dio = Dio();
+  final dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 20),
+  ));
 
   /// 获取codeforces的解题数
   ///   //数据来源：https://github.com/Liu233w/acm-statistics
@@ -12,7 +15,11 @@ class SolvedNumServices {
     final url = 'https://ojhunt.com/api/crawlers/codeforces/$name';
     final response = await dio.get(url);
     if (response.statusCode == 200) {
-      return SolvedNum(name: name, solvedNum: response.data['data']['solved']);
+      final data = response.data?['data'];
+      if (data == null || data['solved'] == null) {
+        throw Exception('查询失败或用户不存在');
+      }
+      return SolvedNum(name: name, solvedNum: data['solved'] as int);
     } else {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
@@ -37,12 +44,16 @@ class SolvedNumServices {
     };
     Response response = await dio.post(url, data: data);
     if (response.statusCode == 200) {
-      final infor = response.data['data']['userProfileUserQuestionProgressV2']
-          ['numAcceptedQuestions'];
-      final easySolvedNum = infor[0]['count'];
-      final mediumSolvedNum = infor[1]['count'];
-      final hardSolvedNum = infor[2]['count'];
-      final totalSolvedNum = easySolvedNum + mediumSolvedNum + hardSolvedNum;
+      final progress = response.data?['data']
+          ?['userProfileUserQuestionProgressV2'];
+      final infor = progress?['numAcceptedQuestions'];
+      // 新用户可能没有做题记录（数组为空或字段缺失），按 0 处理
+      int totalSolvedNum = 0;
+      if (infor is List) {
+        for (final item in infor) {
+          totalSolvedNum += (item?['count'] as int? ?? 0);
+        }
+      }
       return SolvedNum(name: name, solvedNum: totalSolvedNum);
     } else {
       throw Exception("请求失败，状态码：${response.statusCode}");
@@ -62,8 +73,11 @@ class SolvedNumServices {
         final jsonData = match.group(1);
         if (jsonData != null) {
           final data = json.decode(jsonData);
-          final solvedNum = data['counts']['acAll'] as int;
-          return SolvedNum(name: name, solvedNum: solvedNum);
+          final acAll = data?['counts']?['acAll'];
+          if (acAll is num) {
+            return SolvedNum(name: name, solvedNum: acAll.toInt());
+          }
+          throw Exception('无法解析Vjudge数据');
         }
       }
       throw Exception('无法解析Vjudge数据');
@@ -82,16 +96,23 @@ class SolvedNumServices {
     );
     final response = await dio.get(url, options: options);
     if (response.statusCode == 200) {
-      print(response.data);
-      int userId = response.data['users'][0]['uid'];
+      final users = response.data?['users'];
+      if (users is! List || users.isEmpty) {
+        throw Exception('未找到该洛谷用户，请检查用户名');
+      }
+      int userId = users[0]['uid'];
       final url = 'https://www.luogu.com.cn/user/$userId';
       final res = await dio.get(url, options: options);
       if (res.statusCode == 200) {
-        final text = res.data
-            .toString()
-            .split('passedProblemCount')[1]
-            .split('submittedProblemCount')[0];
-        String decodedString = Uri.decodeComponent(text);
+        final parts = res.data.toString().split('passedProblemCount');
+        if (parts.length < 2) {
+          throw Exception('无法解析洛谷数据');
+        }
+        final subParts = parts[1].split('submittedProblemCount');
+        String decodedString = Uri.decodeComponent(subParts[0]);
+        if (decodedString.length < 4) {
+          throw Exception('无法解析洛谷数据');
+        }
         decodedString = decodedString.substring(2, decodedString.length - 2);
         final solvedNum = int.parse(decodedString);
         return SolvedNum(name: name, solvedNum: solvedNum);
@@ -123,7 +144,11 @@ class SolvedNumServices {
     final url = 'https://ojhunt.com/api/crawlers/hdu/$name';
     final response = await dio.get(url);
     if (response.statusCode == 200) {
-      return SolvedNum(name: name, solvedNum: response.data['data']['solved']);
+      final data = response.data?['data'];
+      if (data == null || data['solved'] == null) {
+        throw Exception('查询失败或用户不存在');
+      }
+      return SolvedNum(name: name, solvedNum: data['solved'] as int);
     } else {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
@@ -153,7 +178,11 @@ class SolvedNumServices {
     final url = 'https://ojhunt.com/api/crawlers/nowcoder/$name';
     final response = await dio.get(url);
     if (response.statusCode == 200) {
-      return SolvedNum(name: name, solvedNum: response.data['data']['solved']);
+      final data = response.data?['data'];
+      if (data == null || data['solved'] == null) {
+        throw Exception('查询失败或用户不存在');
+      }
+      return SolvedNum(name: name, solvedNum: data['solved'] as int);
     } else {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
@@ -251,8 +280,15 @@ class SolvedNumServices {
     try {
       var start = 0;
       var limit = 25;
+      var pageCount = 0;
+      // 避免用户不存在时无限遍历整个排行榜
+      final maxPages = 2000;
 
       while (true) {
+        pageCount++;
+        if (pageCount > maxPages) {
+          throw Exception("未找到用户（已超过查询上限）");
+        }
         final url = 'https://www.matiji.net/exam-back/pc/ojRankByType.do';
         final response = await dio.post(
           url,
@@ -266,16 +302,22 @@ class SolvedNumServices {
 
         if (response.statusCode == 200) {
           final data = response.data;
-          if (data['error_no'] == '0') {
-            final datas = data['data']['datas'] as List;
+          // error_no 可能以字符串或数字形式返回，统一转字符串比较
+          if (data?['error_no']?.toString() == '0') {
+            final datas = data['data']?['datas'];
+            if (datas is! List) {
+              throw Exception("API返回格式异常");
+            }
             for (var item in datas) {
-              if (item['nickname'] == name) {
-                return SolvedNum(name: name, solvedNum: item['passNum']);
+              if (item?['nickname']?.toString().trim() == name.trim()) {
+                final passNum = item?['passNum'];
+                return SolvedNum(
+                    name: name, solvedNum: (passNum is num) ? passNum.toInt() : 0);
               }
             }
 
             // 检查是否还有更多数据
-            final total = data['data']['total'] as int;
+            final total = (data['data']?['total'] as num?)?.toInt() ?? 0;
             if (start + limit >= total) {
               break;
             }
@@ -293,10 +335,4 @@ class SolvedNumServices {
       throw Exception("查询码题集失败: $e");
     }
   }
-}
-
-void main() async {
-  final services = SolvedNumServices();
-  final nowcoder = await services.getCodeforcesSolvedNum(name: 'kano07');
-  print('Codeforces solved num: ${nowcoder.solvedNum}');
 }

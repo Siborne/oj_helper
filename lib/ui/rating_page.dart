@@ -39,7 +39,9 @@ class _RatingPageState extends State<RatingPage> {
   Future<void> _loadPersistedData() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     for (var platformName in _platformNames) {
-      String? storedUsername = prefs.getString(platformName);
+      // 优先读新 key（rating_ 前缀），兼容旧版本直接用平台名作 key 的数据
+      String? storedUsername = prefs.getString('rating_$platformName') ??
+          prefs.getString(platformName);
       if (storedUsername != null) {
         _usernameControllers[platformName]!.text = storedUsername;
         setState(() {});
@@ -50,7 +52,7 @@ class _RatingPageState extends State<RatingPage> {
   // 保存用户输入的用户名
   Future<void> _saveUsername(String platformName, String username) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString(platformName, username);
+    await prefs.setString('rating_$platformName', username);
   }
 
   // // 加载折线图(TODO)

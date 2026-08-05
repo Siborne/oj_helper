@@ -10,7 +10,11 @@ class RatingUtils {
       case 'AtCoder':
         return await rs.getAtCoderRating(name: name);
       case '力扣':
-        return (await rs.getLeetCodeRating(name: name)).last;
+        final ratingList = await rs.getLeetCodeRating(name: name);
+        if (ratingList.isEmpty) {
+          throw Exception('该用户暂未参加力扣竞赛');
+        }
+        return ratingList.last;
       case '牛客':
         return await rs.getNowcoderRating(name: name);
       case '洛谷':

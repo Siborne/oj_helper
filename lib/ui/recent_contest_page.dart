@@ -1,9 +1,11 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:oj_helper/models/contest.dart' show Contest;
 import 'package:oj_helper/provider.dart';
 import 'package:oj_helper/ui/widgets/dialog_checkbox.dart' show DialogCheckbox;
 import 'package:oj_helper/utils/contest_utils.dart' show ContestUtils;
+import 'package:oj_helper/utils/favorite_utils.dart' show FavoriteUtils;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,7 +23,6 @@ class _RecentContestPageState extends State<RecentContestPage>
   bool get wantKeepAlive => true;
   final platForms = ['Codeforces', 'AtCoder', '洛谷', '蓝桥云课', '力扣', '牛客'];
   // 按日期分类的比赛列表，长度为7
-  Dio dio = Dio();
   // 查询天数，默认7天
   int day = 7;
   // 加载状态
@@ -36,53 +37,57 @@ class _RecentContestPageState extends State<RecentContestPage>
         isLoading = true;
       });
     }
-    ContestProvider contestProvider =
-        Provider.of<ContestProvider>(context, listen: false);
-    List<List<Contest>> nowContests = await ContestUtils.getRecentContests(
-        day: day, contestProvider: contestProvider);
-    contestProvider.setContests(nowContests);
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+    try {
+      ContestProvider contestProvider =
+          Provider.of<ContestProvider>(context, listen: false);
+      List<List<Contest>> nowContests = await ContestUtils.getRecentContests(
+          day: day, contestProvider: contestProvider);
+      contestProvider.setContests(nowContests);
+    } catch (e) {
+      // 任一平台请求失败时给出提示，避免页面永久停留在加载中
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('加载比赛失败，请检查网络后重试')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
   //收藏比赛
   void _favoriteContest(Contest contest) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String infor =
-        '${contest.name},${contest.startTimeSeconds},${contest.durationSeconds},${contest.platform},${contest.link}';
-    if (prefs.containsKey(contest.name)) {
+    List<String> contestNames = FavoriteUtils.getFavoriteNames(prefs);
+    if (contestNames.contains(contest.name)) {
       await prefs.remove(contest.name);
-      String? cur = prefs.getString('favourite_contests');
-      List<String> contestNames = [];
-      if (cur == null) {
-        prefs.setString('favourite_contests', '');
-        setState(() {});
-        return;
-      }
-      contestNames = cur.split(',');
       contestNames.remove(contest.name);
-      prefs.setString('favourite_contests', contestNames.join(','));
     } else {
-      await prefs.setString(contest.name, infor);
-      String? cur = prefs.getString('favourite_contests');
-      List<String> contestNames = [];
-      if (cur == null) {
-        prefs.setString('favourite_contests', '');
-        setState(() {});
-        return;
-      }
-      contestNames = cur.split(',');
+      await prefs.setString(
+          contest.name,
+          FavoriteUtils.encodeContest(contest.name, contest.startTimeSeconds,
+              contest.durationSeconds, contest.platform, contest.link));
       contestNames.add(contest.name);
-      prefs.setString('favourite_contests', contestNames.join(','));
     }
+    await prefs.setString('favourite_contests', jsonEncode(contestNames));
     setState(() {});
   }
 
   void _getSentences() async {
-    sentence = await sentenceServices.getSentences();
+    try {
+      final result = await sentenceServices.getSentences();
+      if (mounted) {
+        setState(() {
+          sentence = result;
+        });
+      }
+    } catch (e) {
+      // 网络失败时保持默认文案
+    }
   }
 
   void _wait() {
@@ -106,8 +111,18 @@ class _RecentContestPageState extends State<RecentContestPage>
   }
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    // 只在初始化时加载一次句子，避免 build 里反复发网络请求
     _getSentences();
+    // 初次进入页面自动加载近期比赛
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadContests();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
       appBar: AppBar(
