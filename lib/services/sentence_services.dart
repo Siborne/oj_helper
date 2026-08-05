@@ -1,7 +1,10 @@
 import 'package:dio/dio.dart';
 
 class SentenceServices {
-  final Dio dio = Dio();
+  final Dio dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 20),
+  ));
   Future<Map<String, dynamic>> getSentences() async {
     final url = 'https://v1.jinrishici.com/all.json';
     final response = await dio.get(url);

@@ -31,6 +31,8 @@ class ContestUtils {
     }
     // 开始时间排序
     recentContestsList.sort((a, b) => a.startTime.compareTo(b.startTime));
+    // 今天零点（本地），每次调用重新计算，避免跨天后 stale
+    final nowTime = _today;
     //按照开始的日期分组
     List<List<Contest>> timeContests = List.generate(7, (index) => <Contest>[]);
     for (Contest contest in recentContestsList) {
@@ -46,8 +48,6 @@ class ContestUtils {
   }
 
   static final DateFormat formatter = DateFormat('M月d日');
-  static final DateTime nowTime =
-      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   static final Map<int, String> weekdayMap = {
     1: '一',
     2: '二',
@@ -57,9 +57,17 @@ class ContestUtils {
     6: '六',
     0: '日',
   };
+
+  // 今天零点（本地），每次调用重新计算，避免跨天后 stale
+  static DateTime get _today {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
   //获取日期对应名称
   static String getDayName(int index) {
     if (index < 0 || index > 6) return '';
+    final nowTime = _today;
     if (index == 0) {
       return '今日   ${formatter.format(nowTime.add(Duration(days: index)))} 周${weekdayMap[nowTime.weekday % 7]}';
     } else if (index == 1) {

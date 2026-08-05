@@ -52,7 +52,9 @@ class ContestProvider extends ChangeNotifier {
   //显示有无比赛日
   bool showEmptyDay = true;
   void toggleShowEmptyDay(bool value) {
-    showEmptyDay = !showEmptyDay;
+    // 参数 value 是开关期望的目标状态，直接赋值而非取反，
+    // 避免状态与 UI 脱钩（旧实现忽略了参数）
+    showEmptyDay = value;
     notifyListeners(); // 通知监听器更新 UI
   }
 }

@@ -15,28 +15,50 @@ class RecentContestServices {
   final _lanqiaoUrl =
       "https://www.lanqiao.cn/api/v2/contests/?sort=opentime&paginate=0&status=not_finished&game_type_code=2";
   final _nowcoderUrl = "https://ac.nowcoder.com/acm/contest/vip-index";
-  final Dio dio = Dio();
-  final int _nowSconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final Dio dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 20),
+  ));
   int _queryEndSeconds = 7 * 24 * 60 * 60; //最晚时间
-  int midnightSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000 -
-      DateTime.now().hour * 3600;
+
+  // 今天零点（本地）对应的 Unix 秒，每次访问重新计算，避免跨天 stale
+  int get midnightSeconds {
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day);
+    return midnight.millisecondsSinceEpoch ~/ 1000;
+  }
 
   ///修改查询最晚时间
   void setDay(int day) {
     _queryEndSeconds = day * 24 * 60 * 60;
   }
 
-  ///判断比赛时间是否符合时间范围
+  ///判断比赛时间是否符合时间范围（公开静态，便于单元测试）
   ///@return: 比赛过早返回2，比赛过晚返回1，其余返回0
-  int _isIntime({int startTime = 0, int duration = 0}) {
+  static int isInTime({
+    required int startTime,
+    required int duration,
+    required int queryEndSeconds,
+    required int midnightSeconds,
+  }) {
     int endTime = startTime + duration;
-    if (startTime > _queryEndSeconds + midnightSeconds ||
-        duration >= 24 * 60 * 60) {
+    if (startTime > queryEndSeconds + midnightSeconds) {
       return 1;
     } else if (endTime < midnightSeconds) {
       return 2;
     }
     return 0;
+  }
+
+  ///判断比赛时间是否符合时间范围
+  ///@return: 比赛过早返回2，比赛过晚返回1，其余返回0
+  int _isIntime({int startTime = 0, int duration = 0}) {
+    return isInTime(
+      startTime: startTime,
+      duration: duration,
+      queryEndSeconds: _queryEndSeconds,
+      midnightSeconds: midnightSeconds,
+    );
   }
 
   ///获取力扣比赛
@@ -113,20 +135,27 @@ class RecentContestServices {
       final document = parse(response.data);
       final contestList = document.getElementsByClassName("platform-item-main");
       for (var i = 0; i < contestList.length; i++) {
-        final title = contestList[i].getElementsByTagName("a")[0].text;
-        final link =
-            "https://ac.nowcoder.com${contestList[i].getElementsByTagName("a")[0].attributes['href']!}";
+        final links = contestList[i].getElementsByTagName("a");
+        if (links.isEmpty) continue;
+        final href = links[0].attributes['href'];
+        if (href == null) continue;
+        final title = links[0].text;
+        final link = "https://ac.nowcoder.com$href";
         //time格式如下
         // 比赛时间：    2024-06-23 19:00
         //  至     2024-06-23 21:00
         //  (时长:2小时)
-        final time =
-            contestList[i].getElementsByClassName("match-time-icon")[0].text;
+        final timeIcons =
+            contestList[i].getElementsByClassName("match-time-icon");
+        if (timeIcons.isEmpty) continue;
+        final time = timeIcons[0].text;
         // 查找所有匹配的时间，格式如2024-06-23 21:00
         final RegExp timeRegExp = RegExp(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}');
-        final matches = timeRegExp.allMatches(time);
-        final startTimeStr = matches.elementAt(0).group(0)!;
-        final endTimeStr = matches.elementAt(1).group(0)!;
+        final matches = timeRegExp.allMatches(time).toList();
+        // 时间信息不完整（如已结束的比赛）时跳过，而不是崩溃
+        if (matches.length < 2) continue;
+        final startTimeStr = matches[0].group(0)!;
+        final endTimeStr = matches[1].group(0)!;
         //转换成unix时间戳
         final startTime =
             DateTime.parse(startTimeStr).millisecondsSinceEpoch ~/ 1000;
@@ -169,11 +198,13 @@ class RecentContestServices {
             .text
             .split(':');
         //转换为 Unix 时间戳
-        //原格式time：2024-06-29 21:00:00+0900
+        //原格式time：2024-06-29 21:00:00+0900（已含时区偏移）
         //原格式duration：02:00
+        //注意：DateFormat('...Z') 解析带时区的时间后，millisecondsSinceEpoch
+        //已经是绝对时刻（JST 21:00 = 北京 20:00），不要再手动减小时差
         DateFormat starttimeFormat = DateFormat('yyyy-MM-dd HH:mm:ssZ');
         final startTime =
-            starttimeFormat.parse(time).millisecondsSinceEpoch ~/ 1000 - 3600;
+            starttimeFormat.parse(time).millisecondsSinceEpoch ~/ 1000;
         int durationTime =
             int.parse(duration[0]) * 3600 + int.parse(duration[1]) * 60;
         //判断时间范围
@@ -229,18 +260,33 @@ class RecentContestServices {
   Future<List<Contest>> getLanqiaoContests() async {
     Response response = await dio.get(_lanqiaoUrl);
     if (response.statusCode == 200) {
+      // 兼容接口返回 List 或 {data: [...]} 两种结构
+      final raw = response.data;
+      final List<dynamic> list = raw is List
+          ? raw
+          : ((raw is Map && raw['data'] is List)
+              ? raw['data'] as List
+              : []);
       List<Contest> contests = [];
-      for (var i = 0; i < response.data.length; i++) {
-        final name = response.data[i]['name'];
-        final link = "https://www.lanqiao.cn${response.data[i]['html_url']}";
-        print(link);
+      for (var i = 0; i < list.length; i++) {
+        final item = list[i];
+        if (item == null) continue;
+        final name = item['name'];
+        final htmlUrl = item['html_url'];
+        final time = item['open_at'];
+        final endAt = item['end_at'];
+        if (name == null || htmlUrl == null || time == null || endAt == null) {
+          continue;
+        }
+        final link = "https://www.lanqiao.cn$htmlUrl";
         //time格式如2024-06-29T19:00:00+08:00
-        final time = response.data[i]['open_at'];
         DateFormat starttimeFormat = DateFormat('yyyy-MM-ddTHH:mm:ssZ');
-        final startTime =
-            starttimeFormat.parse(time).millisecondsSinceEpoch ~/ 1000;
+        final startTime = starttimeFormat
+            .parse(time.toString())
+            .millisecondsSinceEpoch ~/
+            1000;
         final endTime = starttimeFormat
-            .parse(response.data[i]['end_at'])
+            .parse(endAt.toString())
             .millisecondsSinceEpoch ~/
             1000;
         final duration = endTime - startTime;
@@ -255,9 +301,4 @@ class RecentContestServices {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
   }
-}
-
-void main() async {
-  RecentContestServices r = RecentContestServices();
-  r.getLuoguContests();
 }
