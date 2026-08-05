@@ -93,6 +93,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   void _showAddContestDialog() async {
     // 提前获取 prefs，避免在 onPressed 的 async 回调里 await 后使用 context
     prefs = await SharedPreferences.getInstance();
+    if (!context.mounted) return;
     int startTime = 0, endTime = 0, startYMDseconds = 0, endYMDseconds = 0;
     int startHMseconds = 0, endHMseconds = 0;
     TextEditingController startTimeController = TextEditingController();
