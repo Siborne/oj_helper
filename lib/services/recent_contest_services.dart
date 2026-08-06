@@ -279,6 +279,7 @@ class RecentContestServices {
           continue;
         }
         final link = "https://www.lanqiao.cn$htmlUrl";
+        print(link); // 调试：打印蓝桥比赛链接，便于排查
         //time格式如2024-06-29T19:00:00+08:00
         DateFormat starttimeFormat = DateFormat('yyyy-MM-ddTHH:mm:ssZ');
         final startTime = starttimeFormat
@@ -301,4 +302,10 @@ class RecentContestServices {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
   }
+}
+
+/// 调试入口：本地验证各平台比赛列表解析（保留，便于后续开发时单独运行）
+void main() async {
+  RecentContestServices r = RecentContestServices();
+  r.getLuoguContests();
 }
