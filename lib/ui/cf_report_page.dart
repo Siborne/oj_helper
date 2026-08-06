@@ -44,6 +44,7 @@ class _CfReportPageState extends State<CfReportPage> {
       }
       return;
     }
+    // 统计每题涉及的所有 tag（同一题可含多个 tag），按数量生成饼图
     Map<String, int> tag = {};
     for (var i in data) {
       for (var j in (i['tags'] as List? ?? [])) {
@@ -51,6 +52,7 @@ class _CfReportPageState extends State<CfReportPage> {
         tag[key] = (tag[key] ?? 0) + 1;
       }
     }
+    // 按数量降序排列，保证饼图从大到小展示，颜色循环分配
     final sorted = tag.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     setState(() {
