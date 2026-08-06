@@ -121,6 +121,7 @@ class RatingService {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
     final users = response.data?['users'];
+    // 搜索无结果时 users 为空数组，直接取 [0] 会越界崩溃，先做防御
     if (users is! List || users.isEmpty) {
       throw Exception('未找到该洛谷用户，请检查用户名');
     }
@@ -151,6 +152,7 @@ class RatingService {
     Response response = await dio.get(url);
     if (response.statusCode == 200) {
       final rateHistory = response.data?['data'];
+      // 未参赛用户没有 rating 历史（空列表），取 .last 会越界；rating 也可能为 null
       if (rateHistory is! List || rateHistory.isEmpty) {
         throw Exception('该用户暂无 rating 记录');
       }
@@ -166,5 +168,14 @@ class RatingService {
     } else {
       throw Exception("请求失败，状态码：${response.statusCode}");
     }
+  }
+}
+
+/// 调试入口：本地验证各平台解析逻辑（保留，便于后续开发时单独运行）
+void main() async {
+  RatingService rs = RatingService();
+  var tmp = await rs.getLeetCodeRating(name: 'lu-ming-b');
+  for (var i in tmp) {
+    print("${i.name} ${i.curRating} ${i.maxRating} ${i.time} ${i.ranking}");
   }
 }

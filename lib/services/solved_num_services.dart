@@ -16,6 +16,7 @@ class SolvedNumServices {
     final response = await dio.get(url);
     if (response.statusCode == 200) {
       final data = response.data?['data'];
+      // ojhunt 对无效用户名可能返回空 data，直接索引会崩溃，先做防御
       if (data == null || data['solved'] == null) {
         throw Exception('查询失败或用户不存在');
       }
@@ -74,6 +75,7 @@ class SolvedNumServices {
         if (jsonData != null) {
           final data = json.decode(jsonData);
           final acAll = data?['counts']?['acAll'];
+          // counts/acAll 可能缺失（无 AC 记录或页面结构变化），缺失时防御性抛出
           if (acAll is num) {
             return SolvedNum(name: name, solvedNum: acAll.toInt());
           }
@@ -96,7 +98,9 @@ class SolvedNumServices {
     );
     final response = await dio.get(url, options: options);
     if (response.statusCode == 200) {
+      print(response.data); // 调试：查看洛谷搜索结果，便于排查
       final users = response.data?['users'];
+      // 搜索无结果时 users 为空数组，直接取 [0] 会越界崩溃，先做防御
       if (users is! List || users.isEmpty) {
         throw Exception('未找到该洛谷用户，请检查用户名');
       }
@@ -145,6 +149,7 @@ class SolvedNumServices {
     final response = await dio.get(url);
     if (response.statusCode == 200) {
       final data = response.data?['data'];
+      // ojhunt 对无效用户名可能返回空 data，直接索引会崩溃，先做防御
       if (data == null || data['solved'] == null) {
         throw Exception('查询失败或用户不存在');
       }
@@ -179,6 +184,7 @@ class SolvedNumServices {
     final response = await dio.get(url);
     if (response.statusCode == 200) {
       final data = response.data?['data'];
+      // ojhunt 对无效用户名可能返回空 data，直接索引会崩溃，先做防御
       if (data == null || data['solved'] == null) {
         throw Exception('查询失败或用户不存在');
       }
@@ -335,4 +341,11 @@ class SolvedNumServices {
       throw Exception("查询码题集失败: $e");
     }
   }
+}
+
+/// 调试入口：本地验证各平台解析逻辑（保留，便于后续开发时单独运行）
+void main() async {
+  final services = SolvedNumServices();
+  final nowcoder = await services.getCodeforcesSolvedNum(name: 'kano07');
+  print('Codeforces solved num: ${nowcoder.solvedNum}');
 }
