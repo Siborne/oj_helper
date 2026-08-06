@@ -11,20 +11,36 @@ class NavigationPage extends StatefulWidget {
 }
 
 class _NavigationPageState extends State<NavigationPage> {
+  //当前选中项
+  int _selectedIndex = 0;
+  // 收藏页 key：IndexedStack 下页面常驻，切到收藏 tab 时需主动刷新
+  final GlobalKey<FavoritesPageState> _favoritesKey =
+      GlobalKey<FavoritesPageState>();
+  //页面列表（在 initState 中初始化，字段初始化器不能引用 this）
+  late final List<Widget> _pages;
+
   @override
   void initState() {
     super.initState();
+    _pages = [
+      RecentContestPage(),
+      FavoritesPage(key: _favoritesKey),
+      ServicePage(),
+      SettingPage(),
+    ];
   }
 
-  //当前选中项
-  int _selectedIndex = 0;
-  //页面列表
-  final List<Widget> _pages = [
-    RecentContestPage(),
-    FavoritesPage(),
-    ServicePage(),
-    SettingPage(),
-  ];
+  // 切换页面
+  void _onTabSelected(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    // 切到收藏页时刷新收藏列表（近期比赛页可能刚收藏了新的比赛）
+    if (index == 1) {
+      _favoritesKey.currentState?.reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -44,11 +60,7 @@ class _NavigationPageState extends State<NavigationPage> {
                 children: [
                   NavigationRail(
                     selectedIndex: _selectedIndex,
-                    onDestinationSelected: (index) {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
-                    },
+                    onDestinationSelected: _onTabSelected,
                     leading: SizedBox(height: 10),
                     labelType: NavigationRailLabelType.all,
                     destinations: const [
@@ -112,11 +124,7 @@ class _NavigationPageState extends State<NavigationPage> {
                     currentIndex: _selectedIndex,
                     selectedLabelStyle: TextStyle(color: Colors.blue),
                     // 点击事件
-                    onTap: (index) {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
-                    },
+                    onTap: _onTabSelected,
                   ),
                 ],
               );

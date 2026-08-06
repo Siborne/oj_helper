@@ -9,11 +9,13 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:day_night_time_picker/day_night_time_picker.dart';
 
 class FavoritesPage extends StatefulWidget {
+  const FavoritesPage({super.key});
+
   @override
-  State<FavoritesPage> createState() => _FavoritesPageState();
+  State<FavoritesPage> createState() => FavoritesPageState();
 }
 
-class _FavoritesPageState extends State<FavoritesPage> {
+class FavoritesPageState extends State<FavoritesPage> {
   final List<String> platforms = [
     '洛谷',
     '牛客',
@@ -24,8 +26,16 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ];
   List<Contest> favoriteContests = [];
   late SharedPreferences prefs;
+
+  // 重新加载收藏列表（供导航切到本页时调用；IndexedStack 下页面常驻，
+  // initState 不会再次执行，需要主动刷新才能看到新收藏的/删除的比赛）
+  Future<void> reload() async {
+    favoriteContests.clear();
+    await __loadFavoriteContest();
+  }
+
   // 加载收藏夹
-  void __loadFavoriteContest() async {
+  Future<void> __loadFavoriteContest() async {
     prefs = await SharedPreferences.getInstance();
     final names = FavoriteUtils.getFavoriteNames(prefs);
     for (String s in names) {
